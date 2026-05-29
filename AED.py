@@ -4,6 +4,7 @@ from google import genai
 import json
 import sqlite3
 import streamlit_authenticator as stauth
+import requests
 
 # --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(
@@ -39,10 +40,9 @@ def init_database_native():
     )
     """)
     
-    # Vérification si le compte admin existe déjà pour éviter les doublons
+    # Vérification si le compte admin existe déjà
     cursor.execute("SELECT 1 FROM users WHERE username = 'admin'")
     if not cursor.fetchone():
-        # Hachage du mot de passe admin par défaut (Epita2026)
         hashed_password = stauth.Hasher.hash_list(['Epita2026'])[0]
         cursor.execute("""
         INSERT INTO users (username, name, password) 
@@ -52,7 +52,6 @@ def init_database_native():
     conn.commit()
     conn.close()
 
-# On lance l'initialisation propre au démarrage
 try:
     init_database_native()
 except Exception as e:
@@ -60,7 +59,7 @@ except Exception as e:
     st.stop()
 
 
-# --- 3. FONCTIONS DE RECHERCHE EN BASE DE DONNÉES ---
+# --- 3. FONCTIONS DE RECHERCHE & API EXTERNE ---
 def load_users_from_db():
     conn = sqlite3.connect("utilisateurs.db")
     cursor = conn.cursor()
@@ -95,7 +94,23 @@ def load_user_history(username):
     conn.close()
     return rows
 
-# Chargement des identifiants pour l'authentificateur
+@st.cache_data(ttl=900) # Met en cache la météo pendant 15 minutes pour éviter de surcharger l'API
+def get_outdoor_weather():
+    """Récupère la température et la météo en temps réel via l'API Open-Meteo (Coordonnées de Villejuif/Paris)"""
+    try:
+        url = "https://api.open-meteo.com/v1/forecast?latitude=48.7918&longitude=2.3608&current_weather=true"
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        if "current_weather" in data:
+            temp = data["current_weather"]["temperature"]
+            wind = data["current_weather"]["windspeed"]
+            return {"temp": f"{temp}°C", "wind": f"{wind} km/h", "status": "OK"}
+    except Exception:
+        pass
+    return {"temp": "--°C", "wind": "-- km/h", "status": "Erreur"}
+
+
+# Chargement des identifiants
 try:
     credentials = load_users_from_db()
 except Exception as e:
@@ -210,6 +225,9 @@ if st.session_state.get("authentication_status"):
             "⏳ Mon Historique"
         ])
         
+        # Récupération en arrière-plan des données météo
+        weather = get_outdoor_weather()
+        
         if image_source is not None:
             img = Image.open(image_source)
             
@@ -232,7 +250,8 @@ if st.session_state.get("authentication_status"):
                         except Exception:
                             response = client.models.generate_content(model='gemini-2.0-flash', contents=[img, prompt])
                         
-                        texte = response.text.strip().replace("```json", "").replace("```", "").strip()
+                        texte = response.text.strip().replace("```json", "").replace("
+```", "").strip()
                         resultat = json.loads(texte)
                         st.session_state["last_result"] = resultat
                         
@@ -247,11 +266,14 @@ if st.session_state.get("authentication_status"):
             liste_incidents = resultat.get("incidents", [])
             
             with tab_rapport:
-                st.subheader("📊 Métriques Actuelles")
-                m1, m2, m3 = st.columns(3)
+                # --- AFFICHAGE DES METRIQUES AVEC METEO ---
+                st.subheader("📊 Métriques Établissement & Pièce")
+                m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Humains détectés", f"{resultat['nb_personnes']} / 9")
                 m2.metric("Alertes actives", len(liste_incidents))
                 m3.metric("Statut Pièce", "Conforme" if not liste_incidents else "Anomalie")
+                # Intégration de notre API météo extérieure
+                m4.metric("Température Extérieure", weather["temp"], delta=weather["wind"] + " (Vent)")
                 st.divider()
                 
                 if not liste_incidents:
@@ -274,7 +296,12 @@ if st.session_state.get("authentication_status"):
                 
         else:
             with tab_rapport:
-                st.info("📌 En attente d'une capture photo ou d'un fichier importé à gauche.")
+                st.subheader("📊 Données Environnementales Externes")
+                w_col1, w_col2 = st.columns(2)
+                w_col1.metric("Température de l'air (Dehors)", weather["temp"])
+                w_col2.metric("Vitesse du vent", weather["wind"])
+                st.divider()
+                st.info("📌 En attente d'une capture photo ou d'un fichier importé à gauche pour le diagnostic intérieur.")
 
         with tab_historique:
             st.subheader(f"⏳ Rapports de diagnostic de `{username}`")
