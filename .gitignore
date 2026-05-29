@@ -1,3 +1,10 @@
+# Base de données locale (Contient les mots de passe)
+utilisateurs.db
+
+# Fichiers de configuration locaux (Contient votre clé API Gemini)
 .streamlit/secrets.toml
+
+# Fichiers temporaires Python
 __pycache__/
-*.png
+*.pyc
+generate_keys.py
