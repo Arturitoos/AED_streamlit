@@ -249,11 +249,10 @@ if st.session_state.get("authentication_status"):
                         except Exception:
                             response = client.models.generate_content(model='gemini-2.0-flash', contents=[img, prompt])
                         
-                        texte = response.text.strip()
-                        if texte.startswith("```json"):
-                            texte = texte.replace("
-```json", "").replace("```", "")
-                        texte = texte.strip()
+                        # Nettoyage ultra-robuste du texte JSON
+                        texte = response.text.strip().strip("`").strip()
+                        if texte.startswith("json"):
+                            texte = texte[4:].strip()
                         
                         resultat = json.loads(texte)
                         st.session_state["last_result"] = resultat
