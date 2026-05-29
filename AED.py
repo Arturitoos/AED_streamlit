@@ -38,7 +38,6 @@ st.html("""
 """)
 
 # --- 4. EN-TÊTE DE L'INTERFACE ---
-# À METTRE À LA PLACE :
 st.html('<h1 class="main-title">🛡️ S.A.M. - Salle 306</h1>')
 st.caption("**Système d'Analyse et de Monitorage** | Bâtiment KB3 | Version Intelligente 2.5-Flash")
 
@@ -71,6 +70,19 @@ with col_gauche:
         
     if image_source is not None:
         st.button("🔄 Forcer une ré-analyse", use_container_width=True)
+        
+    st.divider()
+    
+    # --- AJOUT : VISUALISATION DES INCIDENTS SURVEILLÉS ---
+    st.markdown("🔍 **Incidents recherchés par l'IA :**")
+    st.info("""
+    * 🚨 **Surcharge** (> 9 personnes)
+    * 🪑 **Manque de tables** (> 8 étudiants)
+    * 👥 **Non-respect du placement** (Plusieurs par table)
+    * 🔕 **TV éteinte** (Écran noir détecté)
+    * 🪟 **Fenêtre ouverte** (Risque sécurité/énergie)
+    * 🪵 **Chaise renversée** (Désordre au sol)
+    """)
 
 # --- 7. LOGIQUE DE TRAITEMENT ET RENDU DES RÉSULTATS (Colonne Droite) ---
 with col_droite:
@@ -105,14 +117,12 @@ with col_droite:
                 Si aucun incident n'est trouvé, laisse le tableau "incidents" vide [].
                 """
                 
-                # Tentative principale avec Gemini 2.5 Flash
                 try:
                     response = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=[img, prompt]
                     )
                 except Exception as e:
-                    # En cas de surcharge des serveurs Google (Erreur 503), bascule transparente sur le modèle 2.0
                     if "503" in str(e):
                         st.warning("⚠️ Modèle principal saturé, bascule automatique sur le modèle de secours...")
                         response = client.models.generate_content(
@@ -122,7 +132,6 @@ with col_droite:
                     else:
                         raise e
                 
-                # Nettoyage et décodage du format JSON reçu par l'IA
                 texte_reponse = response.text.strip()
                 if texte_reponse.startswith("```json"):
                     texte_reponse = texte_reponse.split("```json")[1].split("```")[0].strip()
@@ -168,7 +177,6 @@ with col_droite:
             else:
                 st.write("Les systèmes de vision ont détecté les écarts suivants :")
                 for inc in liste_incidents:
-                    # Rendu sécurisé des cartes d'incident sans risque de plantage HTML
                     couleur_badge = "🔴" if inc["gravite"] == "Critique" else "🟡"
                     st.html(f"""
                     <div class="custom-card" style="border-left-color: {'#FF4B4B' if inc['gravite'] == 'Critique' else '#FFAA00'}">
