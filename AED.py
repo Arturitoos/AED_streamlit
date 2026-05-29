@@ -8,8 +8,8 @@ import requests
 
 # --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(
-    page_title="S.A.M. - Salle 306", 
-    page_icon="🛡️", 
+    page_title="Msc Data", 
+    page_icon="📊", 
     layout="wide"
 )
 
@@ -189,7 +189,7 @@ if st.session_state.get("authentication_status"):
         </style>
     """)
 
-    st.html('<h1 class="main-title">🛡️ S.A.M. - Salle 306</h1>')
+    st.html('<h1 class="main-title">📊 Msc DATA</h1>')
     st.caption(f"Bonjour **{name}** | Session en ligne : `{username}`")
 
     try:
@@ -231,7 +231,7 @@ if st.session_state.get("authentication_status"):
             img = Image.open(image_source)
             
             if "last_result" not in st.session_state or st.button("🔄 Forcer une ré-analyse", use_container_width=True):
-                with st.spinner("🧠 S.A.M. analyse la salle..."):
+                with st.spinner("🧠 Analyse de la salle..."):
                     try:
                         prompt = """
                         Tu es un inspecteur de sécurité pour la salle 306 du bâtiment KB3.
