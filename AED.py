@@ -4,18 +4,8 @@ from google import genai
 import json
 import sqlite3
 import streamlit_authenticator as stauth
-
 import os
 import subprocess
-
-# --- AUTO-INITIALISATION DE LA BASE DE DONNÉES ---
-# Si le fichier .db n'existe pas, on lance automatiquement init_db.py
-if not os.path.exists("utilisateurs.db"):
-    try:
-        subprocess.run(["python", "init_db.py"], check=True)
-    except Exception:
-        # Alternative si la commande 'python' s'appelle 'python3' sur le serveur
-        subprocess.run(["python3", "init_db.py"], check=True)
 
 # --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(
@@ -24,7 +14,19 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- 2. FONCTIONS DE LA BASE DE DONNÉES SQLITE ---
+# --- 2. AUTO-INITIALISATION POUR LE DÉPLOIEMENT STREAMLIT CLOUD ---
+# Si le fichier .db n'existe pas sur le serveur distant, on force sa création
+if not os.path.exists("utilisateurs.db"):
+    try:
+        subprocess.run(["python", "init_db.py"], check=True)
+    except Exception:
+        try:
+            subprocess.run(["python3", "init_db.py"], check=True)
+        except Exception as e:
+            st.error(f"Impossible d'initialiser automatiquement la base SQLite : {e}")
+            st.stop()
+
+# --- 3. FONCTIONS DE LA BASE DE DONNÉES SQLITE ---
 def load_users_from_db():
     conn = sqlite3.connect("utilisateurs.db")
     cursor = conn.cursor()
@@ -37,7 +39,6 @@ def load_users_from_db():
     return credentials
 
 def save_analysis_to_history(username, statut, nb_personnes, result_json):
-    """Sauvegarde le résultat d'un scan dans l'historique de l'utilisateur."""
     conn = sqlite3.connect("utilisateurs.db")
     cursor = conn.cursor()
     cursor.execute("""
@@ -48,7 +49,6 @@ def save_analysis_to_history(username, statut, nb_personnes, result_json):
     conn.close()
 
 def load_user_history(username):
-    """Récupère l'historique complet d'un utilisateur spécifique."""
     conn = sqlite3.connect("utilisateurs.db")
     cursor = conn.cursor()
     cursor.execute("""
@@ -61,13 +61,14 @@ def load_user_history(username):
     conn.close()
     return rows
 
+# Chargement dynamique des comptes
 try:
     credentials = load_users_from_db()
-except sqlite3.OperationalError:
-    st.error("❌ Base de données introuvable. Exécutez 'init_db.py' d'abord.")
+except Exception as e:
+    st.error(f"Erreur d'accès à la base de données : {e}")
     st.stop()
 
-# --- 3. CONFIGURATION DE L'AUTHENTIFICATION & INSCRIPTION ---
+# --- 4. CONFIGURATION DE L'AUTHENTIFICATION & ENREGISTREMENT ---
 authenticator = stauth.Authenticate(
     credentials,
     st.secrets["cookie"]["name"],
@@ -75,17 +76,14 @@ authenticator = stauth.Authenticate(
     int(st.secrets["cookie"]["expiry_days"])
 )
 
-# Vérification du statut de connexion actuel (via cookies)
 authentication_status = st.session_state.get("authentication_status")
 
 if not authentication_status:
-    # Interface avec deux onglets pour l'accès avant connexion
     tab_login, tab_register = st.tabs(["🔐 Se connecter", "📝 Nouvel utilisateur ?"])
     
     with tab_login:
         authenticator.login(location='main')
         authentication_status = st.session_state.get("authentication_status")
-        
         if authentication_status is False:
             st.error("❌ Utilisateur ou mot de passe incorrect.")
             
@@ -104,7 +102,7 @@ if not authentication_status:
                 elif new_password != confirm_password:
                     st.error("❌ Les mots de passe ne correspondent pas.")
                 elif new_username in credentials["usernames"]:
-                    st.error("❌ Cet identifiant est déjà utilisé par un autre utilisateur.")
+                    st.error("❌ Cet identifiant est déjà utilisé.")
                 else:
                     try:
                         hashed_new_password = stauth.Hasher.hash_list([new_password])[0]
@@ -114,19 +112,18 @@ if not authentication_status:
                                        (new_username.strip(), new_name.strip(), hashed_new_password))
                         conn.commit()
                         conn.close()
-                        st.success("🎉 Compte créé ! Allez sur l'onglet 'Se connecter'.")
+                        st.success("🎉 Compte créé ! Rendez-vous sur l'onglet 'Se connecter'.")
                         st.balloons()
                         st.cache_data.clear()
                     except Exception as e:
                         st.error(f"Erreur lors de la création du compte : {e}")
 
-# --- 4. SI ET SEULEMENT SI CONNECTÉ : RENDU DE L'APPLICATION ---
+# --- 5. INTERFACE APPRÉCIABLE APRÈS VALIDATION DE SESSION ---
 if st.session_state.get("authentication_status"):
     
     name = st.session_state.get("name")
     username = st.session_state.get("username")
 
-    # Style CSS personnalisé
     st.html("""
         <style>
         .main-title {
@@ -142,23 +139,19 @@ if st.session_state.get("authentication_status"):
         </style>
     """)
 
-    # En-tête de l'interface
     st.html('<h1 class="main-title">🛡️ S.A.M. - Salle 306</h1>')
-    st.caption(f"Bonjour **{name}** | Session active : `{username}`")
+    st.caption(f"Bonjour **{name}** | Session en ligne : `{username}`")
 
     try:
         client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
     except Exception:
-        st.error("⚠️ Clé API Gemini manquante.")
+        st.error("⚠️ Clé API Gemini absente de l'interface d'administration de vos secrets.")
         st.stop()
 
-    # Architecture en colonnes du Tableau de Bord
     col_gauche, col_droite = st.columns([1, 2], gap="large")
 
     with col_gauche:
         st.subheader("🎛️ Panneau de Contrôle")
-        
-        # Le bouton de déconnexion est maintenant protégé à 100% par la condition IF
         authenticator.logout('🚪 Se déconnecter', 'main')
         st.divider()
         
