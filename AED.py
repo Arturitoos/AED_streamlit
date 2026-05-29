@@ -94,9 +94,9 @@ def load_user_history(username):
     conn.close()
     return rows
 
-@st.cache_data(ttl=900) # Met en cache la météo pendant 15 minutes pour éviter de surcharger l'API
+@st.cache_data(ttl=900)
 def get_outdoor_weather():
-    """Récupère la température et la météo en temps réel via l'API Open-Meteo (Coordonnées de Villejuif/Paris)"""
+    """Récupère la température en temps réel via l'API Open-Meteo pour Villejuif"""
     try:
         url = "https://api.open-meteo.com/v1/forecast?latitude=48.7918&longitude=2.3608&current_weather=true"
         response = requests.get(url, timeout=5)
@@ -104,10 +104,10 @@ def get_outdoor_weather():
         if "current_weather" in data:
             temp = data["current_weather"]["temperature"]
             wind = data["current_weather"]["windspeed"]
-            return {"temp": f"{temp}°C", "wind": f"{wind} km/h", "status": "OK"}
+            return {"temp": f"{temp}°C", "wind": f"{wind} km/h"}
     except Exception:
         pass
-    return {"temp": "--°C", "wind": "-- km/h", "status": "Erreur"}
+    return {"temp": "--°C", "wind": "-- km/h"}
 
 
 # Chargement des identifiants
@@ -225,7 +225,6 @@ if st.session_state.get("authentication_status"):
             "⏳ Mon Historique"
         ])
         
-        # Récupération en arrière-plan des données météo
         weather = get_outdoor_weather()
         
         if image_source is not None:
@@ -250,8 +249,12 @@ if st.session_state.get("authentication_status"):
                         except Exception:
                             response = client.models.generate_content(model='gemini-2.0-flash', contents=[img, prompt])
                         
-                        texte = response.text.strip().replace("```json", "").replace("
-```", "").strip()
+                        texte = response.text.strip()
+                        if texte.startswith("```json"):
+                            texte = texte.replace("
+```json", "").replace("```", "")
+                        texte = texte.strip()
+                        
                         resultat = json.loads(texte)
                         st.session_state["last_result"] = resultat
                         
@@ -266,13 +269,11 @@ if st.session_state.get("authentication_status"):
             liste_incidents = resultat.get("incidents", [])
             
             with tab_rapport:
-                # --- AFFICHAGE DES METRIQUES AVEC METEO ---
                 st.subheader("📊 Métriques Établissement & Pièce")
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("Humains détectés", f"{resultat['nb_personnes']} / 9")
                 m2.metric("Alertes actives", len(liste_incidents))
                 m3.metric("Statut Pièce", "Conforme" if not liste_incidents else "Anomalie")
-                # Intégration de notre API météo extérieure
                 m4.metric("Température Extérieure", weather["temp"], delta=weather["wind"] + " (Vent)")
                 st.divider()
                 
