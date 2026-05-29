@@ -2,3 +2,4 @@ streamlit
 streamlit-authenticator
 google-genai
 pillow
+requests
