@@ -4,8 +4,6 @@ from google import genai
 import json
 import sqlite3
 import streamlit_authenticator as stauth
-import os
-import subprocess
 
 # --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(
@@ -14,29 +12,55 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- 2. AUTO-INITIALISATION POUR LE DÉPLOIEMENT STREAMLIT CLOUD ---
-def check_and_init_db():
-    # On tente de voir si la table 'users' existe à l'intérieur du fichier
-    try:
-        conn = sqlite3.connect("utilisateurs.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM users LIMIT 1")
-        conn.close()
-    except sqlite3.OperationalError:
-        # Si la table n'existe pas (ou que le fichier est vide/absent), on force l'initialisation
-        try:
-            subprocess.run(["python", "init_db.py"], check=True)
-        except Exception:
-            try:
-                subprocess.run(["python3", "init_db.py"], check=True)
-            except Exception as e:
-                st.error(f"Impossible d'initialiser automatiquement la base SQLite : {e}")
-                st.stop()
+# --- 2. INITIALISATION DIRECTE ET NATIVE DE LA BASE DE DONNÉES ---
+def init_database_native():
+    conn = sqlite3.connect("utilisateurs.db")
+    cursor = conn.cursor()
+    
+    # Création de la table des utilisateurs
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY,
+        name TEXT,
+        password TEXT
+    )
+    """)
+    
+    # Création de la table historique
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
+        date_analyse TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        statut TEXT,
+        nb_personnes INTEGER,
+        json_complet TEXT,
+        FOREIGN KEY(username) REFERENCES users(username)
+    )
+    """)
+    
+    # Vérification si le compte admin existe déjà pour éviter les doublons
+    cursor.execute("SELECT 1 FROM users WHERE username = 'admin'")
+    if not cursor.fetchone():
+        # Hachage du mot de passe admin par défaut (Epita2026)
+        hashed_password = stauth.Hasher.hash_list(['Epita2026'])[0]
+        cursor.execute("""
+        INSERT INTO users (username, name, password) 
+        VALUES (?, ?, ?)
+        """, ("admin", "Administrateur Système", hashed_password))
+        
+    conn.commit()
+    conn.close()
 
-# Lancement de la vérification de sécurité
-check_and_init_db()
+# On lance l'initialisation propre au démarrage
+try:
+    init_database_native()
+except Exception as e:
+    st.error(f"⚠️ Erreur lors de l'initialisation de la base de données : {e}")
+    st.stop()
 
-# --- 3. FONCTIONS DE LA BASE DE DONNÉES SQLITE ---
+
+# --- 3. FONCTIONS DE RECHERCHE EN BASE DE DONNÉES ---
 def load_users_from_db():
     conn = sqlite3.connect("utilisateurs.db")
     cursor = conn.cursor()
@@ -71,14 +95,15 @@ def load_user_history(username):
     conn.close()
     return rows
 
-# Chargement dynamique des comptes
+# Chargement des identifiants pour l'authentificateur
 try:
     credentials = load_users_from_db()
 except Exception as e:
-    st.error(f"Erreur d'accès à la base de données : {e}")
+    st.error(f"Erreur de chargement des utilisateurs : {e}")
     st.stop()
 
-# --- 4. CONFIGURATION DE L'AUTHENTIFICATION & ENREGISTREMENT ---
+
+# --- 4. CONFIGURATION DE L'AUTHENTIFICATION & INSCRIPTION ---
 authenticator = stauth.Authenticate(
     credentials,
     st.secrets["cookie"]["name"],
@@ -128,7 +153,7 @@ if not authentication_status:
                     except Exception as e:
                         st.error(f"Erreur lors de la création du compte : {e}")
 
-# --- 5. INTERFACE APPRÉCIABLE APRÈS VALIDATION DE SESSION ---
+# --- 5. INTERFACE APRÈS VALIDATION DE SESSION ---
 if st.session_state.get("authentication_status"):
     
     name = st.session_state.get("name")
@@ -155,7 +180,7 @@ if st.session_state.get("authentication_status"):
     try:
         client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
     except Exception:
-        st.error("⚠️ Clé API Gemini absente de l'interface d'administration de vos secrets.")
+        st.error("⚠️ Clé API Gemini absente des secrets.")
         st.stop()
 
     col_gauche, col_droite = st.columns([1, 2], gap="large")
