@@ -5,6 +5,18 @@ import json
 import sqlite3
 import streamlit_authenticator as stauth
 
+import os
+import subprocess
+
+# --- AUTO-INITIALISATION DE LA BASE DE DONNÉES ---
+# Si le fichier .db n'existe pas, on lance automatiquement init_db.py
+if not os.path.exists("utilisateurs.db"):
+    try:
+        subprocess.run(["python", "init_db.py"], check=True)
+    except Exception:
+        # Alternative si la commande 'python' s'appelle 'python3' sur le serveur
+        subprocess.run(["python3", "init_db.py"], check=True)
+
 # --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(
     page_title="S.A.M. - Salle 306", 
