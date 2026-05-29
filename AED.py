@@ -9,11 +9,38 @@ import sys
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-# Configuration de la page
-st.set_page_config(page_title="Inspecteur & Catalogue - Salle 306", page_icon="🏫", layout="centered")
+# --- CONFIGURATION DE LA PAGE AVEC UN THEME ÉPURÉ ---
+st.set_page_config(
+    page_title="Scanner 306 - Hub", 
+    page_icon="🛡️", 
+    layout="wide"  # Mode large pour faire un effet Dashboard
+)
 
-st.title("🏫 Inspecteur Intelligent & Catalogue d'Objets")
-st.caption("Analyse de la salle 306 (KB3) avec inventaire automatique des objets visibles.")
+# --- STYLE CSS PERSONNALISÉ (Pour l'originalité) ---
+# On injecte un peu de CSS pour modifier l'apparence des blocs et titres
+st.markdown("""
+    <style>
+    .main-title {
+        font-size: 2.8rem !important;
+        font-weight: 800;
+        background: linear-gradient(45deg, #FF4B4B, #FF8585);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+    }
+    .custom-card {
+        border-radius: 10px;
+        padding: 15px;
+        background-color: #f0f2f6;
+        margin-bottom: 10px;
+        border-left: 5px solid #FF4B4B;
+    }
+    </style>
+""", unsafe_allowed_html=True)
+
+# En-tête original
+st.markdown('<h1 class="main-title">🛡️ S.A.M. - Salle 306</h1>', unsafe_allowed_html=True)
+st.caption("**Système d'Analyse et de Monitorage** | Bâtiment KB3 | Version Intelligente 2.0")
 
 # --- INITIALISATION CLIENT GEMINI ---
 try:
@@ -22,122 +49,124 @@ except Exception:
     st.error("⚠️ Clé API Gemini manquante. Veuillez configurer le fichier `.streamlit/secrets.toml`.")
     st.stop()
 
-# --- 1. SÉLECTION ET CAPTURE DE L'IMAGE ---
-methode = st.radio(
-    "Comment souhaitez-vous ajouter votre photo ?",
-    ("Prendre une photo en direct", "Sélectionner une photo depuis l'appareil")
-)
+# --- DISPOSITION EN COLONNES (Dashboard) ---
+# On sépare l'écran en deux : à gauche les commandes, à droite les résultats
+col_gauche, col_droite = st.columns([1, 2], gap="large")
 
-image_source = None
-
-if methode == "Prendre une photo en direct":
-    picture = st.camera_input("Prendre une photo")
-    if picture:
-        image_source = picture
-else:
-    uploaded_file = st.file_uploader("Choisissez une image...", type=["png", "jpg", "jpeg"])
-    if uploaded_file:
-        image_source = uploaded_file
-
-st.divider()
-
-# --- 2. ANALYSE PAR GEMINI ---
-if image_source is not None:
-    img = Image.open(image_source)
+with col_gauche:
+    st.subheader("🎛️ Panneau de Contrôle")
     
-    st.button("🔄 Relancer l'analyse")
+    # Mode de sélection stylisé dans un bloc
+    methode = st.pills(
+        "Mode d'acquisition :",
+        ["Prendre une photo", "Importer un fichier"],
+        selection_mode="single",
+        default="Prendre une photo"
+    )
     
-    with st.spinner("🧠 Gemini analyse la salle et dresse l'inventaire des objets..."):
-        try:
-            # Mise à jour du prompt pour demander le catalogue d'objets
-            prompt = """
-            Tu es un inspecteur de sécurité et un gestionnaire d'inventaire pour la salle 306 du bâtiment KB3.
-            Analyse la photo et effectue deux tâches :
-            
-            1. SÉCURITÉ : Vérifie les règles (Max 9 personnes, max 8 étudiants, chaises bien positionnées, TV allumée, fenêtres fermées).
-            2. INVENTAIRE : Identifie TOUS les objets importants visibles sur la photo (ex: Table, Chaise, Télévision, Fenêtre, Ordinateur, Sac à dos, Tableau blanc, etc.). 
-               Pour chaque type d'objet unique trouvé, donne son utilisation/rôle standard dans cette salle de classe.
+    image_source = None
+    if methode == "Prendre une photo":
+        image_source = st.camera_input("Déclencher la caméra")
+    else:
+        image_source = st.file_uploader("Fichier image (JPG/PNG)", type=["png", "jpg", "jpeg"])
+        
+    if image_source is not None:
+        st.button("🔄 Forcer une ré-analyse", use_container_width=True)
 
-            Réponds UNIQUEMENT sous la forme d'un objet JSON strict avec cette structure exacte :
-            {
-                "nb_personnes": <nombre entier>,
-                "incidents": [
-                    {"type": "<Nom de l'incident>", "gravite": "<Critique> ou <Avertissement>", "description": "<Explication>"}
-                ],
-                "diagnostic_general": "<Synthèse en français>",
-                "catalogue_objets": [
-                    {"objet": "<Nom de l'objet>", "quantite_visible": "<Nombre ou 'Plusieurs'>", "utilisation": "<Rôle de l'objet dans la salle 306>"}
-                ]
-            }
-            Si aucun incident, "incidents" doit être []. Si aucun objet, "catalogue_objets" doit être [].
-            """
-            
+# --- TRAITEMENT ET AFFICHAGE DES RÉSULTATS (Colonne Droite) ---
+with col_droite:
+    if image_source is None:
+        # Message d'attente original avec une boîte d'info stylisée
+        st.info("📌 **En attente de données.** Veuillez capturer ou importer une photo depuis le panneau de gauche pour lancer l'analyse automatique.")
+    else:
+        img = Image.open(image_source)
+        
+        with st.spinner("🧠 S.A.M. analyse la géométrie de la pièce et des objets..."):
             try:
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=[img, prompt]
-                )
+                prompt = """
+                Tu es un inspecteur de sécurité et un gestionnaire d'inventaire pour la salle 306 du bâtiment KB3.
+                Analyse la photo et effectue deux tâches :
+                1. SÉCURITÉ : Vérifie les règles (Max 9 personnes, max 8 étudiants, chaises bien positionnées, TV allumée, fenêtres fermées).
+                2. INVENTAIRE : Identifie TOUS les objets importants visibles sur la photo. Pour chaque type d'objet unique trouvé, donne son utilisation/rôle standard dans cette salle de classe.
+
+                Réponds UNIQUEMENT sous la forme d'un objet JSON strict avec cette structure exacte :
+                {
+                    "nb_personnes": <nombre entier>,
+                    "incidents": [
+                        {"type": "<Nom de l'incident>", "gravite": "<Critique> ou <Avertissement>", "description": "<Explication>"}
+                    ],
+                    "diagnostic_general": "<Synthèse en français>",
+                    "catalogue_objets": [
+                        {"objet": "<Nom de l'objet>", "quantite_visible": "<Nombre ou 'Plusieurs'>", "utilisation": "<Rôle de l'objet dans la salle 306>"}
+                    ]
+                }
+                """
+                
+                response = client.models.generate_content(model='gemini-2.5-flash', contents=[img, prompt])
+                texte_reponse = response.text.strip()
+                if texte_reponse.startswith("```json"):
+                    texte_reponse = texte_reponse.split("```json")[1].split("```")[0].strip()
+                resultat = json.loads(texte_reponse)
+                
             except Exception as e:
-                if "503" in str(e):
-                    st.warning("⚠️ Modèle principal surchargé, bascule sur le modèle de secours...")
-                    response = client.models.generate_content(
-                        model='gemini-2.0-flash', 
-                        contents=[img, prompt]
-                    )
-                else:
-                    raise e
-            
-            texte_reponse = response.text.strip()
-            if texte_reponse.startswith("```json"):
-                texte_reponse = texte_reponse.split("```json")[1].split("```")[0].strip()
-                
-            resultat = json.loads(texte_reponse)
-            
-        except Exception as e:
-            st.error(f"❌ Erreur lors de l'analyse : {e}")
-            st.stop()
+                st.error(f"❌ Erreur système : {e}")
+                st.stop()
 
-    st.success("✅ Analyse et inventaire terminés !")
-    
-    # --- 3. AFFICHAGE DES INCIDENTS ---
-    st.subheader("📊 Rapport de Conformité")
-    st.metric(label="Personnes détectées", value=resultat["nb_personnes"])
-    
-    liste_incidents = resultat["incidents"]
-    if not liste_incidents:
-        st.success(f"✅ **Salle conforme :** {resultat['diagnostic_general']}")
-    else:
-        for inc in liste_incidents:
-            if inc["gravite"] == "Critique":
-                st.error(f"**[{inc['type']}]** : {inc['description']}")
+        # --- RECONSTRUCTION DE L'INTERFACE DE RÉSULTATS ---
+        st.subheader("📊 Métriques & Diagnostics")
+        
+        # Affichage des jauges côte à côte
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Humains détectés", f"{resultat['nb_personnes']} / 9")
+        
+        liste_incidents = resultat.get("incidents", [])
+        m2.metric("Alertes actives", len(liste_incidents), delta="- OK" if len(liste_incidents)==0 else "+ Attention", delta_color="inverse")
+        
+        # Statut général de la salle
+        statut_salle = "Conforme" if not liste_incidents else "Anomalie"
+        m3.metric("Statut Pièce", statut_salle)
+
+        st.divider()
+
+        # Utilisation d'onglets (Tabs) pour organiser les données de manière moderne
+        tab_rapport, tab_catalogue, tab_image = st.tabs([
+            "📋 Rapport d'Incidents", 
+            "🗂️ Inventaire des Objets", 
+            "🖼️ Image Source"
+        ])
+        
+        with tab_rapport:
+            if not liste_incidents:
+                st.success(f"🌱 **Aucune anomalie détectée :** {resultat['diagnostic_general']}")
             else:
-                st.warning(f"**[{inc['type']}]** : {inc['description']}")
-                
-    st.divider()
-    
-    # --- 4. AFFICHAGE DU CATALOGUE DE DONNÉES (Nouveauté) ---
-    st.subheader("📋 Catalogue des Données et Objets Visibles")
-    st.write("Voici la liste des équipements détectés par l'IA et leur fonction dans la pièce :")
-    
-    liste_objets = resultat.get("catalogue_objets", [])
-    
-    if liste_objets:
-        # On convertit la liste JSON en un tableau propre grâce à Streamlit et la structure native Python
-        st.dataframe(
-            liste_objets,
-            column_config={
-                "objet": "Équipement / Objet",
-                "quantite_visible": "Quantité détectée",
-                "utilisation": "Utilisation / Rôle dans la salle 306"
-            },
-            hide_index=True,
-            width="stretch"
-        )
-    else:
-        st.info("Aucun objet spécifique n'a pu être répertorié sur cette photo.")
+                st.write("Les systèmes ont détecté les écarts de conformité suivants :")
+                for inc in liste_incidents:
+                    # Rendu sous forme de cartes d'incidents customisées
+                    couleur_badge = "🔴" if inc["gravite"] == "Critique" else "🟡"
+                    st.markdown(f"""
+                    <div class="custom-card" style="border-left-color: {'#FF4B4B' if inc['gravite'] == 'Critique' else '#FFAA00'}">
+                        <h4>{couleur_badge} {inc['type']} ({inc['gravite']})</h4>
+                        <p style="margin:0; color:#333;">{inc['description']}</p>
+                    </div>
+                    """, unsafe_allowed_html=True)
+                st.info(f"💡 **Note de l'inspecteur :** {resultat['diagnostic_general']}")
 
-    st.divider()
-    
-    # Vue de la photo originale
-    st.subheader("🖼️ Cliché inspecté")
-    st.image(img, caption="Image analysée par Gemini Vision", width="stretch")
+        with tab_catalogue:
+            st.write("Équipements et infrastructures répertoriés en temps réel :")
+            liste_objets = resultat.get("catalogue_objets", [])
+            if liste_objets:
+                st.dataframe(
+                    liste_objets,
+                    column_config={
+                        "objet": "Équipement",
+                        "quantite_visible": "Quantité",
+                        "utilisation": "Rôle / Fonctionnalité"
+                    },
+                    hide_index=True,
+                    use_container_width=True # Mis à jour pour occuper tout l'onglet
+                )
+            else:
+                st.info("Aucun objet détecté dans le champ de vision.")
+
+        with tab_image:
+            st.image(img, caption="Cliché analysé par S.A.M.", width="stretch")
