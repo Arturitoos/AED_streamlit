@@ -15,16 +15,26 @@ st.set_page_config(
 )
 
 # --- 2. AUTO-INITIALISATION POUR LE DÉPLOIEMENT STREAMLIT CLOUD ---
-# Si le fichier .db n'existe pas sur le serveur distant, on force sa création
-if not os.path.exists("utilisateurs.db"):
+def check_and_init_db():
+    # On tente de voir si la table 'users' existe à l'intérieur du fichier
     try:
-        subprocess.run(["python", "init_db.py"], check=True)
-    except Exception:
+        conn = sqlite3.connect("utilisateurs.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM users LIMIT 1")
+        conn.close()
+    except sqlite3.OperationalError:
+        # Si la table n'existe pas (ou que le fichier est vide/absent), on force l'initialisation
         try:
-            subprocess.run(["python3", "init_db.py"], check=True)
-        except Exception as e:
-            st.error(f"Impossible d'initialiser automatiquement la base SQLite : {e}")
-            st.stop()
+            subprocess.run(["python", "init_db.py"], check=True)
+        except Exception:
+            try:
+                subprocess.run(["python3", "init_db.py"], check=True)
+            except Exception as e:
+                st.error(f"Impossible d'initialiser automatiquement la base SQLite : {e}")
+                st.stop()
+
+# Lancement de la vérification de sécurité
+check_and_init_db()
 
 # --- 3. FONCTIONS DE LA BASE DE DONNÉES SQLITE ---
 def load_users_from_db():
